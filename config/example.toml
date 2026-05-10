@@ -1,0 +1,48 @@
+workspace = ".x1371"
+decode_depth = 2
+decode_max_nodes = 250
+archive_recursion_limit = 3
+hardlink_ingest = true
+compute_frame_hashes = true
+
+enhancement_variants = [
+  "grayscale",
+  "autocontrast",
+  "equalize",
+  "threshold",
+  "invert",
+  "sharpen",
+  "denoise",
+  "edge_enhance",
+  "upscale2x",
+  "rotate90",
+  "rotate180",
+  "flip_horizontal",
+  "flip_vertical",
+  "channel_red",
+  "channel_green",
+  "channel_blue",
+]
+
+[[ocr_passes]]
+name = "default"
+lang = "eng"
+psm = 6
+oem = 1
+
+[[ocr_passes]]
+name = "sparse"
+lang = "eng"
+psm = 11
+oem = 1
+
+[tool_paths]
+ffmpeg = "ffmpeg"
+ffprobe = "ffprobe"
+exiftool = "exiftool"
+sevenzip = "7z"
+binwalk = "binwalk"
+tesseract = "tesseract"
+file = "file"
+strings = "strings"
+imagemagick = "magick"
