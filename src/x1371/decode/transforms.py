@@ -6,6 +6,7 @@ from binascii import Error as BinasciiError
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from ..unicode_analysis import ZERO_WIDTH_STEGO_CHARS
 from .scoring import structuredness
 
 
@@ -55,6 +56,11 @@ def _bytes_to_text(payload: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return payload.hex()
+
+
+def _bits_to_bytes(bits: str) -> bytes:
+    """Pack a binary string (multiples of 8 chars) into bytes."""
+    return bytes(int(bits[start : start + 8], 2) for start in range(0, len(bits), 8))
 
 
 def base_transform(text: str) -> Iterable[TransformResult]:
@@ -169,8 +175,6 @@ def unicode_stego_transform(text: str) -> Iterable[TransformResult]:
     * The ZWNJ (U+200C) / ZWJ (U+200D) and ZWS (U+200B) / ZWNJ (U+200C) pairs
       used by popular open-source libraries are always attempted.
     """
-    from ..unicode_analysis import ZERO_WIDTH_STEGO_CHARS
-
     payload_chars = [c for c in text if c in ZERO_WIDTH_STEGO_CHARS]
     if not payload_chars:
         return
@@ -181,9 +185,8 @@ def unicode_stego_transform(text: str) -> Iterable[TransformResult]:
         zero_c, one_c = char_set[0], char_set[1]
         bits = "".join("0" if c == zero_c else "1" for c in payload_chars)
         if bits and len(bits) % 8 == 0:
-            data = bytes(int(bits[index : index + 8], 2) for index in range(0, len(bits), 8))
             yield _result(
-                _bytes_to_text(data),
+                _bytes_to_text(_bits_to_bytes(bits)),
                 {"mode": "binary", "zero": f"U+{ord(zero_c):04X}", "one": f"U+{ord(one_c):04X}"},
             )
 
@@ -191,9 +194,8 @@ def unicode_stego_transform(text: str) -> Iterable[TransformResult]:
         relevant = [c for c in payload_chars if c in {zero_cp, one_cp}]
         if len(relevant) >= 8 and len(relevant) % 8 == 0:
             bits = "".join("0" if c == zero_cp else "1" for c in relevant)
-            data = bytes(int(bits[index : index + 8], 2) for index in range(0, len(bits), 8))
             yield _result(
-                _bytes_to_text(data),
+                _bytes_to_text(_bits_to_bytes(bits)),
                 {
                     "mode": "binary_common_pair",
                     "zero": f"U+{ord(zero_cp):04X}",

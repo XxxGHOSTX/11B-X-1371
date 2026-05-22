@@ -118,7 +118,7 @@ def _decode_stego_bits(bits: str) -> str:
     """Decode a binary string produced by a zero-width stego scheme into readable text."""
     if not bits or len(bits) % 8 != 0:
         return ""
-    data = bytes(int(bits[index : index + 8], 2) for index in range(0, len(bits), 8))
+    data = bytes(int(bits[start : start + 8], 2) for start in range(0, len(bits), 8))
     for encoding in ("utf-8", "latin-1"):
         try:
             return data.decode(encoding)
