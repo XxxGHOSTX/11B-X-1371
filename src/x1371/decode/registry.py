@@ -39,4 +39,5 @@ def default_registry() -> DecoderRegistry:
     registry.register("mirrored", transforms.mirrored_transform)
     registry.register("upside_down", transforms.upside_down_transform)
     registry.register("transposition", transforms.transposition_helpers)
+    registry.register("unicode_stego", transforms.unicode_stego_transform)
     return registry
