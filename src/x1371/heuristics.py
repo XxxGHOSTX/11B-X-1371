@@ -144,3 +144,23 @@ def token_profile_lead(artifact_id: str, text: str) -> HeuristicLead:
         summary="Token profile generated",
         details={"token_count": len(tokens), "unique_tokens": len(set(tokens))},
     )
+
+
+_PGP_HEADERS = (
+    "-----BEGIN PGP PUBLIC KEY BLOCK-----",
+    "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+    "-----BEGIN PGP MESSAGE-----",
+    "-----BEGIN PGP SIGNED MESSAGE-----",
+    "-----BEGIN PGP SIGNATURE-----",
+)
+
+
+@registry.register("pgp_artifact")
+def pgp_artifact_lead(artifact_id: str, text: str) -> HeuristicLead:
+    found = [header for header in _PGP_HEADERS if header in text]
+    return HeuristicLead(
+        artifact_id=artifact_id,
+        analyzer="pgp_artifact",
+        summary="PGP block(s) detected" if found else "No PGP blocks detected",
+        details={"pgp_blocks": found, "count": len(found)},
+    )

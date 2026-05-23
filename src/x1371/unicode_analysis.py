@@ -8,6 +8,19 @@ INVISIBLE_CATEGORIES = {"Cf", "Cc"}
 BIDI_MARKERS = {"LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI"}
 SCRIPT_HINTS = ["LATIN", "CYRILLIC", "GREEK", "HEBREW", "ARABIC", "HIRAGANA", "KATAKANA", "CJK"]
 
+# Characters commonly used as the steganographic alphabet in zero-width encoding schemes
+ZERO_WIDTH_STEGO_CHARS: frozenset[str] = frozenset({
+    "\u180e",  # Mongolian Vowel Separator
+    "\u200b",  # Zero Width Space
+    "\u200c",  # Zero Width Non-Joiner
+    "\u200d",  # Zero Width Joiner
+    "\u202c",  # Pop Directional Formatting
+    "\u202d",  # Left-to-Right Override
+    "\u202e",  # Right-to-Left Override
+    "\u2060",  # Word Joiner
+    "\ufeff",  # Zero Width No-Break Space / BOM
+})
+
 
 def codepoint_dump(text: str) -> list[dict[str, object]]:
     return [
@@ -101,6 +114,73 @@ def chunk_patterns(text: str) -> dict[str, object]:
     }
 
 
+def _decode_stego_bits(bits: str) -> str:
+    """Decode a binary string produced by a zero-width stego scheme into readable text."""
+    if not bits or len(bits) % 8 != 0:
+        return ""
+    data = bytes(int(bits[start : start + 8], 2) for start in range(0, len(bits), 8))
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.hex()
+
+
+def zero_width_stego_extract(text: str) -> dict[str, object]:
+    """Extract and attempt to decode a zero-width steganographic payload from *text*.
+
+    The function collects every character that belongs to the zero-width stego
+    alphabet, then tries several binary-mapping schemes that are common in
+    open-source steganography libraries.  Each successful attempt is included in
+    the returned ``attempts`` list.
+    """
+    payload_chars = [c for c in text if c in ZERO_WIDTH_STEGO_CHARS]
+    if not payload_chars:
+        return {"found": False, "char_count": 0, "codepoints": [], "unique_chars": [], "attempts": []}
+
+    codepoints = [f"U+{ord(c):04X}" for c in payload_chars]
+    unique_chars = sorted({f"U+{ord(c):04X}" for c in payload_chars})
+    attempts: list[dict[str, object]] = []
+
+    char_set = sorted(set(payload_chars), key=ord)
+
+    # When exactly two distinct char types are present, treat directly as binary
+    if len(char_set) == 2:
+        zero_c, one_c = char_set[0], char_set[1]
+        bits = "".join("0" if c == zero_c else "1" for c in payload_chars)
+        result = _decode_stego_bits(bits)
+        if result:
+            attempts.append({
+                "method": "binary",
+                "zero": f"U+{ord(zero_c):04X}",
+                "one": f"U+{ord(one_c):04X}",
+                "result": result,
+            })
+
+    # Common-pair binary attempts regardless of other chars in the stream
+    for zero_cp, one_cp in [("\u200c", "\u200d"), ("\u200b", "\u200c")]:
+        relevant = [c for c in payload_chars if c in {zero_cp, one_cp}]
+        if len(relevant) >= 8 and len(relevant) % 8 == 0:
+            bits = "".join("0" if c == zero_cp else "1" for c in relevant)
+            result = _decode_stego_bits(bits)
+            if result:
+                attempts.append({
+                    "method": "binary_common_pair",
+                    "zero": f"U+{ord(zero_cp):04X}",
+                    "one": f"U+{ord(one_cp):04X}",
+                    "result": result,
+                })
+
+    return {
+        "found": True,
+        "char_count": len(payload_chars),
+        "codepoints": codepoints,
+        "unique_chars": unique_chars,
+        "attempts": attempts,
+    }
+
+
 def analyze_unicode(text: str) -> dict[str, object]:
     return {
         "codepoints": codepoint_dump(text),
@@ -113,4 +193,5 @@ def analyze_unicode(text: str) -> dict[str, object]:
         "motifs": repeated_motifs(text),
         "delimiters": delimiter_summary(text),
         "chunk_patterns": chunk_patterns(text),
+        "zero_width_stego": zero_width_stego_extract(text),
     }

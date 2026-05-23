@@ -6,6 +6,7 @@ from binascii import Error as BinasciiError
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from ..unicode_analysis import ZERO_WIDTH_STEGO_CHARS
 from .scoring import structuredness
 
 
@@ -55,6 +56,11 @@ def _bytes_to_text(payload: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return payload.hex()
+
+
+def _bits_to_bytes(bits: str) -> bytes:
+    """Pack a binary string (multiples of 8 chars) into bytes."""
+    return bytes(int(bits[start : start + 8], 2) for start in range(0, len(bits), 8))
 
 
 def base_transform(text: str) -> Iterable[TransformResult]:
@@ -155,3 +161,44 @@ def transposition_helpers(text: str) -> Iterable[TransformResult]:
         chunks = [compact[index : index + size] for index in range(0, len(compact), size)]
         yield _result("".join(chunk[::-1] for chunk in chunks), {"mode": "chunk_reverse", "size": size})
         yield _result(evens + odds, {"mode": "even_odd", "size": size})
+
+
+def unicode_stego_transform(text: str) -> Iterable[TransformResult]:
+    """Extract and binary-decode a zero-width steganographic payload embedded in *text*.
+
+    Characters from the common stego alphabet (zero-width spaces, joiners,
+    directional marks, etc.) are collected and mapped to bits.  The two most
+    prevalent schemes tried are:
+
+    * When exactly two distinct stego chars are present the lower codepoint maps
+      to ``0`` and the higher to ``1``.
+    * The ZWNJ (U+200C) / ZWJ (U+200D) and ZWS (U+200B) / ZWNJ (U+200C) pairs
+      used by popular open-source libraries are always attempted.
+    """
+    payload_chars = [c for c in text if c in ZERO_WIDTH_STEGO_CHARS]
+    if not payload_chars:
+        return
+
+    char_set = sorted(set(payload_chars), key=ord)
+
+    if len(char_set) == 2:
+        zero_c, one_c = char_set[0], char_set[1]
+        bits = "".join("0" if c == zero_c else "1" for c in payload_chars)
+        if bits and len(bits) % 8 == 0:
+            yield _result(
+                _bytes_to_text(_bits_to_bytes(bits)),
+                {"mode": "binary", "zero": f"U+{ord(zero_c):04X}", "one": f"U+{ord(one_c):04X}"},
+            )
+
+    for zero_cp, one_cp in [("\u200c", "\u200d"), ("\u200b", "\u200c")]:
+        relevant = [c for c in payload_chars if c in {zero_cp, one_cp}]
+        if len(relevant) >= 8 and len(relevant) % 8 == 0:
+            bits = "".join("0" if c == zero_cp else "1" for c in relevant)
+            yield _result(
+                _bytes_to_text(_bits_to_bytes(bits)),
+                {
+                    "mode": "binary_common_pair",
+                    "zero": f"U+{ord(zero_cp):04X}",
+                    "one": f"U+{ord(one_cp):04X}",
+                },
+            )
